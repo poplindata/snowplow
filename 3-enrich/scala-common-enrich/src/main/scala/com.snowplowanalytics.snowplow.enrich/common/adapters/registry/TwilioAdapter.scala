@@ -36,7 +36,7 @@ import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 
 // This project
 import com.snowplowanalytics.snowplow.enrich.common.loaders.CollectorPayload
-import com.snowplowanalytics.snowplow.enrich.common.utils.{JsonUtils => JU}
+import scala.util.{Failure, Success, Try}
 
 /**
  * Transforms a collector payload which conforms to
@@ -56,50 +56,45 @@ object TwilioAdapter extends Adapter {
 
   // Schemas for reverse-engineering a Snowplow unstructured event
   private val EventSchemaMap = Map (
-    "delivered" -> SchemaKey("com.twilio", "sms_delivered", "jsonschema", "1-0-0").toSchemaUri,
-    "queued" -> SchemaKey("com.twilio", "sms_queued", "jsonschema", "1-0-0").toSchemaUri,
-    "sent" -> SchemaKey("com.twilio", "sms_sent", "jsonschema", "1-0-0").toSchemaUri
+    "delivered"   -> SchemaKey("com.twilio", "delivered", "jsonschema", "1-0-0").toSchemaUri,
+    "queued"      -> SchemaKey("com.twilio", "queued", "jsonschema", "1-0-0").toSchemaUri,
+    "sent"        -> SchemaKey("com.twilio", "sent", "jsonschema", "1-0-0").toSchemaUri,
+    "undelivered" -> SchemaKey("com.twilio", "undelivered", "jsonschema", "1-0-0").toSchemaUri
   )
 
   /**
    * Converts payload into a single validated event
    * Expects a valid json, returns failure if one is not present
    *
-   * @param body_json json payload as a string
+   * @param json json payload as a string
    * @param payload other payload details
    * @return a validated event - a success will contain the corresponding RawEvent, failures will
    *         contain a reason for failure
    */
-  private def payloadBodyToEvent(body_json: String, payload: CollectorPayload): Validated[RawEvent] = {
+  private def payloadBodyToEvent(json: String, payload: CollectorPayload): Validated[RawEvent] = {
 
-    try {
-
-      val parsed = parse(body_json)
-      val eventType = (parsed \ "MessageStatus").extractOpt[String]
-      val clean = cleanJson(cleanJson(parsed, "MessageStatus"), "SmsStatus") 
-      println("eventType is " + eventType) 
-      lookupSchema(eventType, VendorName, EventSchemaMap) map {
-        schema => RawEvent(
-          api = payload.api,
-          parameters = toUnstructEventParams(
-            TrackerVersion,
-            toMap(payload.querystring),
-            schema,
-            clean,
-            "srv"
-          ),
-          contentType = payload.contentType,
-          source = payload.source,
-          //context = payload.context.copy(timestamp = Some(new DateTime(collectorTimestamp.get, DateTimeZone.UTC)))
-          context = payload.context 
-        )
+    val parsed = Try(parse(json))
+      parsed match {
+        case Success(parsed) => parsed
+        case Failure(e)      => return s"$VendorName event failed to parse into JSON: [${e.getMessage}]".failureNel
       }
+    val eventType = (parsed.get \ "MessageStatus").extractOpt[String]
+    val clean = cleanJson(cleanJson(parsed.get, "MessageStatus"), "SmsStatus") 
 
-    } catch {
-      case e: JsonParseException => {
-        val exception = JU.stripInstanceEtc(e.toString).orNull
-        s"$VendorName event failed to parse into JSON: [$exception]".failNel
-      }
+    lookupSchema(eventType, VendorName, EventSchemaMap) map {
+      schema => RawEvent(
+        api = payload.api,
+        parameters = toUnstructEventParams(
+          TrackerVersion,
+          toMap(payload.querystring),
+          schema,
+          clean,
+          "srv"
+        ),
+        contentType = payload.contentType,
+        source = payload.source,
+        context = payload.context 
+      )
     }
 
   }
@@ -126,11 +121,9 @@ object TwilioAdapter extends Adapter {
       }
     }
 
-  def cleanJson(json: JValue, jsonfield: String): JValue =
-    json removeField {
-      case JField(`jsonfield`, _) => true 
-      case _ => false 
+  def cleanJson(json: JValue, jsonField: String): JValue =
+    json.removeField {
+      case JField(`jsonField`, _) => true 
+      case _                      => false 
     }
-
-
 }
