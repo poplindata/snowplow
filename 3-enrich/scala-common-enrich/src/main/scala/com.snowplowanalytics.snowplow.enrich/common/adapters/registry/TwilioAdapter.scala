@@ -36,6 +36,7 @@ import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 
 // This project
 import com.snowplowanalytics.snowplow.enrich.common.loaders.CollectorPayload
+import com.snowplowanalytics.snowplow.enrich.common.utils.{JsonUtils => JU}
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -59,8 +60,12 @@ object TwilioAdapter extends Adapter {
     "delivered"   -> SchemaKey("com.twilio", "delivered", "jsonschema", "1-0-0").toSchemaUri,
     "queued"      -> SchemaKey("com.twilio", "queued", "jsonschema", "1-0-0").toSchemaUri,
     "sent"        -> SchemaKey("com.twilio", "sent", "jsonschema", "1-0-0").toSchemaUri,
-    "undelivered" -> SchemaKey("com.twilio", "undelivered", "jsonschema", "1-0-0").toSchemaUri
+    "undelivered" -> SchemaKey("com.twilio", "undelivered", "jsonschema", "1-0-0").toSchemaUri,
+    "failed"      -> SchemaKey("com.twilio", "failed", "jsonschema", "1-0-0").toSchemaUri
   )
+
+  // Datetime format used by Twilio (RFC2822 format)
+  private val TwilioDateTimeFormat = DateTimeFormat.forPattern("EEE, dd MMM yyyy HH:mm:ss Z").withZone(DateTimeZone.UTC)
 
   /**
    * Converts payload into a single validated event
@@ -78,8 +83,8 @@ object TwilioAdapter extends Adapter {
         case Success(parsed) => parsed
         case Failure(e)      => return s"$VendorName event failed to parse into JSON: [${e.getMessage}]".failureNel
       }
-    val eventType = (parsed.get \ "MessageStatus").extractOpt[String]
-    val clean = cleanJson(cleanJson(parsed.get, "MessageStatus"), "SmsStatus") 
+    val eventType = (parsed.get \ "MessageStatus").extractOpt[String].orElse(Some("failed"))
+    val clean = cleanJson(parsed.get) 
 
     lookupSchema(eventType, VendorName, EventSchemaMap) map {
       schema => RawEvent(
@@ -121,9 +126,19 @@ object TwilioAdapter extends Adapter {
       }
     }
 
-  def cleanJson(json: JValue, jsonField: String): JValue =
-    json.removeField {
-      case JField(`jsonField`, _) => true 
-      case _                      => false 
+  def cleanJson(json: JValue): JValue = {
+    
+    val j1 = json.removeField {
+      case JField("SmsStatus", _)     => true 
+      case JField("MessageStatus", _) => true 
+      case JField("Status", _)        => true 
+      case _                          => false 
     }
+    val j2 = j1.transformField {
+      case ("DateCreated", JString(value)) => ("DateCreated", JString(JU.toJsonSchemaDateTime(value, TwilioDateTimeFormat)))
+      case ("DateUpdated", JString(value)) => ("DateUpdated", JString(JU.toJsonSchemaDateTime(value, TwilioDateTimeFormat)))
+      case ("DateSent", JString(value))    => ("DateSent", JString(JU.toJsonSchemaDateTime(value, TwilioDateTimeFormat)))
+    }
+    j2
+  }
 }
