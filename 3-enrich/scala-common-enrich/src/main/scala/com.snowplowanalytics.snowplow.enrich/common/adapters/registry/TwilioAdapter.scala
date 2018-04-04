@@ -36,7 +36,6 @@ import org.joda.time.format.{DateTimeFormat, DateTimeFormatter}
 
 // This project
 import com.snowplowanalytics.snowplow.enrich.common.loaders.CollectorPayload
-import com.snowplowanalytics.snowplow.enrich.common.utils.{JsonUtils => JU}
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -64,9 +63,6 @@ object TwilioAdapter extends Adapter {
     "failed"      -> SchemaKey("com.twilio", "failed", "jsonschema", "1-0-0").toSchemaUri
   )
 
-  // Datetime format used by Twilio (RFC2822 format)
-  private val TwilioDateTimeFormat = DateTimeFormat.forPattern("EEE, dd MMM yyyy HH:mm:ss Z").withZone(DateTimeZone.UTC)
-
   /**
    * Converts payload into a single validated event
    * Expects a valid json, returns failure if one is not present
@@ -83,10 +79,10 @@ object TwilioAdapter extends Adapter {
         case Success(parsed) => parsed
         case Failure(e)      => s"$VendorName event failed to parse into JSON: [${e.getMessage}]".failureNel
       }
-    val eventType = parsed.toOption.flatMap(p => (p \ "MessageStatus").extractOpt[String]).getOrElse("failed")
-    val cleaned = parsed.map(p => cleanJson(p))
+    val eventType = parsed.toOption.flatMap(p => (p \ "MessageStatus").extractOpt[String])
+    val cleaned = parsed.get.map(p => cleanJson(p))
 
-    lookupSchema(Some(eventType), VendorName, EventSchemaMap) map {
+    lookupSchema(eventType, VendorName, EventSchemaMap) map {
       schema => RawEvent(
         api = payload.api,
         parameters = toUnstructEventParams(
@@ -128,7 +124,6 @@ object TwilioAdapter extends Adapter {
 
   /**
    * Function that removes selected fields
-   * and converts the RFC2822 date format to a valid date-time format
    *
    * @param json The JSON payload that'll be parsed
    * @return a JValue of the formatted payload
@@ -137,11 +132,6 @@ object TwilioAdapter extends Adapter {
     json.removeField {
       case JField("SmsStatus", _)     => true 
       case JField("MessageStatus", _) => true 
-      case JField("Status", _)        => true 
       case _                          => false 
-    }.transformField {
-      case ("DateCreated", JString(value)) => ("DateCreated", JString(JU.toJsonSchemaDateTime(value, TwilioDateTimeFormat)))
-      case ("DateUpdated", JString(value)) => ("DateUpdated", JString(JU.toJsonSchemaDateTime(value, TwilioDateTimeFormat)))
-      case ("DateSent", JString(value))    => ("DateSent", JString(JU.toJsonSchemaDateTime(value, TwilioDateTimeFormat)))
     }
 }

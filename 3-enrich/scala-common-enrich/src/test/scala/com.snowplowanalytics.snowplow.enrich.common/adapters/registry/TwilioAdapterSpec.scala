@@ -64,55 +64,28 @@ class TwilioAdapterSpec extends Specification with DataTables with ValidationMat
   def e1 = {
 
     val inputJson =     
-       """|{
-            |"Sid":"xxxxxxxxxxxx",
-            |"DateCreated":"Mon, 07 Aug 2017 01:38:24 +0000",
-            |"DateUpdated":"Mon, 07 Aug 2017 01:38:24 +0000",
-            |"DateSent":"Mon, 07 Aug 2017 01:38:24 +0000",
-            |"AccountSid":"ACa192d23e5e9662f4e229a11885fd907b",
-            |"To":"+xxxxxxxxx",
-            |"From":"+xxxxxxxx",
-            |"MessagingServiceSid":"",
-            |"Body":"hello",
-            |"Status":"failed",
-            |"NumSegments":"1",
-            |"NumMedia":"1",
-            |"Direction":"outbound-api",
-            |"ApiVersion":"2010-04-01",
-            |"Price":42.33,
-            |"PriceUnit":"USD",
-            |"ErrorCode":21621,
-            |"ErrorMessage":null,
-            |"Uri":"/2010-04-01/Accounts/ACa192d23e5e9662f4e229a11885fd907b/Messages/MMxxxxxxxx.json",
-            |"SubresourceUris":{
-                |"Media":"/2010-04-01/Accounts/ACa192d23e5e9662f4e229a11885fd907b/Messages/MMxxxxxxxx/Media.json"
-            |}
-          |}""".stripMargin.replaceAll("[\n\r]", "")
+        """|{
+             |"To":"to_field",
+             |"ApiVersion":"apiv",
+             |"MessageSid":"messagesid_field",
+             |"AccountSid":"accountsid_field",
+             |"SmsSid":"smsid_field",
+             |"SmsStatus":"delivered",
+             |"MessageStatus":"delivered",
+             |"From":"from_field",
+             |"MessagingServiceSid":"msserviceid_field"
+             |}""".stripMargin.replaceAll("[\n\r]", "")
 
-    val outputJson =     
-       """|{
-            |"Sid":"xxxxxxxxxxxx",
-            |"DateCreated":"2017-08-07T01:38:24.000Z",
-            |"DateUpdated":"2017-08-07T01:38:24.000Z",
-            |"DateSent":"2017-08-07T01:38:24.000Z",
-            |"AccountSid":"ACa192d23e5e9662f4e229a11885fd907b",
-            |"To":"+xxxxxxxxx",
-            |"From":"+xxxxxxxx",
-            |"MessagingServiceSid":"",
-            |"Body":"hello",
-            |"NumSegments":"1",
-            |"NumMedia":"1",
-            |"Direction":"outbound-api",
-            |"ApiVersion":"2010-04-01",
-            |"Price":42.33,
-            |"PriceUnit":"USD",
-            |"ErrorCode":21621,
-            |"ErrorMessage":null,
-            |"Uri":"/2010-04-01/Accounts/ACa192d23e5e9662f4e229a11885fd907b/Messages/MMxxxxxxxx.json",
-            |"SubresourceUris":{
-                |"Media":"/2010-04-01/Accounts/ACa192d23e5e9662f4e229a11885fd907b/Messages/MMxxxxxxxx/Media.json"
-            |}
-          |}""".stripMargin.replaceAll("[\n\r]", "")
+     val outputJson =     
+        """|{
+             |"To":"to_field",
+             |"ApiVersion":"apiv",
+             |"MessageSid":"messagesid_field",
+             |"AccountSid":"accountsid_field",
+             |"SmsSid":"smsid_field",
+             |"From":"from_field",
+             |"MessagingServiceSid":"msserviceid_field"
+             |}""".stripMargin.replaceAll("[\n\r]", "")
 
     val payload = CollectorPayload(Shared.api, Nil, ContentType.some, inputJson.some,  Shared.cljSource, Shared.context) 
 
@@ -127,7 +100,7 @@ class TwilioAdapterSpec extends Specification with DataTables with ValidationMat
                                     |"schema":"iglu:com.snowplowanalytics.snowplow/unstruct_event/jsonschema/1-0-0",
                                     |"data":
                                       |{
-                                        |"schema":"iglu:com.twilio/failed/jsonschema/1-0-0",
+                                        |"schema":"iglu:com.twilio/delivered/jsonschema/1-0-0",
                                         |"data":%s
                                       |}
                                   |}""".format(outputJson)
@@ -149,7 +122,6 @@ class TwilioAdapterSpec extends Specification with DataTables with ValidationMat
     "Valid, type undelivered"   !! "undelivered"    ! "iglu:com.twilio/undelivered/jsonschema/1-0-0"     |
     "Valid, type failed"        !! "failed"         ! "iglu:com.twilio/failed/jsonschema/1-0-0"          |> {
       (_, schema, expected) =>
-        println("TEST: " + schema + " " + expected)
         val body = "{\"MessageStatus\":\"" + schema + "\"}"
         val payload = CollectorPayload(Shared.api, Nil, ContentType.some, body.some, Shared.cljSource, Shared.context)
         val expectedJson = "{\"schema\":\"iglu:com.snowplowanalytics.snowplow/unstruct_event/jsonschema/1-0-0\",\"data\":{\"schema\":\"" + expected + "\",\"data\":{}}}"
