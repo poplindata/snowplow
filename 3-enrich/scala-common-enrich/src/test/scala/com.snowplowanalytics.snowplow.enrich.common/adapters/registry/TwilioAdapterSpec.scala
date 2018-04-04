@@ -161,5 +161,4 @@ class TwilioAdapterSpec extends Specification with DataTables with ValidationMat
     val payload = CollectorPayload(Shared.api, Nil, ContentType.some, None, Shared.cljSource, Shared.context)
     TwilioAdapter.toRawEvents(payload) must beFailing(NonEmptyList("Request body is empty: no Twilio event to process"))
   }
-
 }

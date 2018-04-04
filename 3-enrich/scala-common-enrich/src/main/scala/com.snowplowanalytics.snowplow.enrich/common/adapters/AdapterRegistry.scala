@@ -53,6 +53,7 @@ object AdapterRegistry {
     val StatusGator     = "com.statusgator"
     val Unbounce        = "com.unbounce"
     val UrbanAirship    = "com.urbanairship.connect"
+    val Twilio          = "com.twilio"
   }
 
   /**
@@ -86,6 +87,7 @@ object AdapterRegistry {
     case (Vendor.StatusGator,     "v1")  => StatusGatorAdapter.toRawEvents(payload)
     case (Vendor.Unbounce,        "v1")  => UnbounceAdapter.toRawEvents(payload)
     case (Vendor.UrbanAirship,    "v1")  => UrbanAirshipAdapter.toRawEvents(payload)
+    case (Vendor.Twilio,          "v1")  => TwilioAdapter.toRawEvents(payload)
     case _ => s"Payload with vendor ${payload.api.vendor} and version ${payload.api.version} not supported by this version of Scala Common Enrich".failNel
   }
 

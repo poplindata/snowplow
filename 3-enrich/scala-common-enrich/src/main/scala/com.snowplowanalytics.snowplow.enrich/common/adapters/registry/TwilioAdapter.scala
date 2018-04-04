@@ -41,7 +41,7 @@ import scala.util.{Failure, Success, Try}
 
 /**
  * Transforms a collector payload which conforms to
- * a known version of the UrbanAirship Connect API
+ * a known version of the Twilio REST API payload
  * into raw events.
  */
 object TwilioAdapter extends Adapter {
@@ -49,7 +49,7 @@ object TwilioAdapter extends Adapter {
   // Vendor name for Failure Message
   private val VendorName = "Twilio"
 
-  // Tracker version for an UrbanAirship Connect API
+  // Tracker version for an Twilio API
   private val TrackerVersion = "com.twilio-v1"
 
     // Expected content type for a request body
@@ -81,19 +81,19 @@ object TwilioAdapter extends Adapter {
     val parsed = Try(parse(json))
       parsed match {
         case Success(parsed) => parsed
-        case Failure(e)      => return s"$VendorName event failed to parse into JSON: [${e.getMessage}]".failureNel
+        case Failure(e)      => s"$VendorName event failed to parse into JSON: [${e.getMessage}]".failureNel
       }
-    val eventType = (parsed.get \ "MessageStatus").extractOpt[String].orElse(Some("failed"))
-    val clean = cleanJson(parsed.get) 
+    val eventType = parsed.toOption.flatMap(p => (p \ "MessageStatus").extractOpt[String]).getOrElse("failed")
+    val cleaned = parsed.map(p => cleanJson(p))
 
-    lookupSchema(eventType, VendorName, EventSchemaMap) map {
+    lookupSchema(Some(eventType), VendorName, EventSchemaMap) map {
       schema => RawEvent(
         api = payload.api,
         parameters = toUnstructEventParams(
           TrackerVersion,
           toMap(payload.querystring),
           schema,
-          clean,
+          cleaned,
           "srv"
         ),
         contentType = payload.contentType,
@@ -106,7 +106,7 @@ object TwilioAdapter extends Adapter {
 
   /**
    * Converts a CollectorPayload instance into raw events.
-   * A UrbanAirship connect API payload only contains a single event.
+   * A Twilio REST API payload only contains a single event.
    * We expect the name parameter to match the supported events, else
    * we have an unsupported event type.
    *
@@ -126,19 +126,22 @@ object TwilioAdapter extends Adapter {
       }
     }
 
-  def cleanJson(json: JValue): JValue = {
-    
-    val j1 = json.removeField {
+  /**
+   * Function that removes selected fields
+   * and converts the RFC2822 date format to a valid date-time format
+   *
+   * @param json The JSON payload that'll be parsed
+   * @return a JValue of the formatted payload
+   */
+  def cleanJson(json: JValue): JValue = 
+    json.removeField {
       case JField("SmsStatus", _)     => true 
       case JField("MessageStatus", _) => true 
       case JField("Status", _)        => true 
       case _                          => false 
-    }
-    val j2 = j1.transformField {
+    }.transformField {
       case ("DateCreated", JString(value)) => ("DateCreated", JString(JU.toJsonSchemaDateTime(value, TwilioDateTimeFormat)))
       case ("DateUpdated", JString(value)) => ("DateUpdated", JString(JU.toJsonSchemaDateTime(value, TwilioDateTimeFormat)))
       case ("DateSent", JString(value))    => ("DateSent", JString(JU.toJsonSchemaDateTime(value, TwilioDateTimeFormat)))
     }
-    j2
-  }
 }
